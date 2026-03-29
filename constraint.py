@@ -1,76 +1,64 @@
-#!/usr/bin/env python3
-"""CSP Solver - Solve constraint satisfaction problems with backtracking + AC-3."""
-import sys
-from collections import deque
+import argparse, json, itertools
 
-class CSP:
-    def __init__(self):
-        self.variables = {}; self.constraints = []; self.neighbors = {}
-    def add_var(self, name, domain):
-        self.variables[name] = list(domain); self.neighbors.setdefault(name, set())
-    def add_constraint(self, vars, fn):
-        self.constraints.append((vars, fn))
-        for v in vars:
-            for u in vars:
-                if u != v: self.neighbors.setdefault(v, set()).add(u)
-    def ac3(self, domains):
-        queue = deque()
-        for v in domains:
-            for n in self.neighbors.get(v, []):
-                queue.append((v, n))
-        while queue:
-            xi, xj = queue.popleft()
-            if self._revise(domains, xi, xj):
-                if not domains[xi]: return False
-                for xk in self.neighbors[xi]:
-                    if xk != xj: queue.append((xk, xi))
+def solve(variables, domains, constraints):
+    """Simple backtracking CSP solver"""
+    assignment = {}
+    def consistent(var, val):
+        assignment[var] = val
+        for (v1, op, v2) in constraints:
+            if v1 in assignment and v2 in assignment:
+                a, b = assignment[v1], assignment[v2]
+                if op == "!=" and a == b: del assignment[var]; return False
+                if op == "==" and a != b: del assignment[var]; return False
+                if op == "<" and a >= b: del assignment[var]; return False
+                if op == ">" and a <= b: del assignment[var]; return False
+        del assignment[var]
         return True
-    def _revise(self, domains, xi, xj):
-        revised = False
-        for x in domains[xi][:]:
-            if not any(self._consistent(xi, x, xj, y) for y in domains[xj]):
-                domains[xi].remove(x); revised = True
-        return revised
-    def _consistent(self, v1, val1, v2, val2):
-        assign = {v1: val1, v2: val2}
-        for vars, fn in self.constraints:
-            if v1 in vars and v2 in vars:
-                if all(v in assign for v in vars):
-                    if not fn(*[assign[v] for v in vars]): return False
-        return True
-    def solve(self):
-        domains = {v: list(d) for v, d in self.variables.items()}
-        if not self.ac3(domains): return None
-        return self._backtrack({}, domains)
-    def _backtrack(self, assignment, domains):
-        if len(assignment) == len(self.variables): return dict(assignment)
-        var = min((v for v in self.variables if v not in assignment), key=lambda v: len(domains[v]))
+    def backtrack(i):
+        if i == len(variables): return dict(assignment)
+        var = variables[i]
         for val in domains[var]:
-            assignment[var] = val
-            ok = True
-            for vars, fn in self.constraints:
-                if all(v in assignment for v in vars):
-                    if not fn(*[assignment[v] for v in vars]): ok = False; break
-            if ok:
-                result = self._backtrack(assignment, domains)
+            if consistent(var, val):
+                assignment[var] = val
+                result = backtrack(i + 1)
                 if result: return result
-            del assignment[var]
+                del assignment[var]
         return None
+    return backtrack(0)
 
 def main():
-    csp = CSP()
-    colors = ["red", "green", "blue"]
-    for region in ["WA", "NT", "SA", "Q", "NSW", "V", "T"]:
-        csp.add_var(region, colors)
-    borders = [("WA","NT"),("WA","SA"),("NT","SA"),("NT","Q"),("SA","Q"),("SA","NSW"),("SA","V"),("Q","NSW"),("NSW","V")]
-    for a, b in borders:
-        csp.add_constraint((a, b), lambda x, y: x != y)
-    print("=== CSP Solver (Australia Map Coloring) ===\n")
-    solution = csp.solve()
-    if solution:
-        print("Solution:")
-        for region in sorted(solution): print(f"  {region:4s}: {solution[region]}")
-    else: print("No solution found")
+    p = argparse.ArgumentParser(description="CSP solver")
+    p.add_argument("file", nargs="?", help="JSON CSP definition")
+    p.add_argument("--nqueens", type=int, help="Solve N-Queens")
+    args = p.parse_args()
+    if args.nqueens:
+        n = args.nqueens
+        variables = [f"q{i}" for i in range(n)]
+        domains = {v: list(range(n)) for v in variables}
+        constraints = []
+        for i in range(n):
+            for j in range(i+1, n):
+                constraints.append((f"q{i}", "!=", f"q{j}"))
+        result = solve(variables, domains, constraints)
+        # Post-check diagonals
+        if result:
+            for i in range(n):
+                for j in range(i+1, n):
+                    if abs(result[f"q{i}"] - result[f"q{j}"]) == j - i:
+                        result = None; break
+                if not result: break
+        if result:
+            for i in range(n):
+                row = ["." if j != result[f"q{i}"] else "Q" for j in range(n)]
+                print(" ".join(row))
+        else:
+            print("No solution found")
+    elif args.file:
+        csp = json.load(open(args.file))
+        result = solve(csp["variables"], csp["domains"], [tuple(c) for c in csp["constraints"]])
+        if result: print(json.dumps(result, indent=2))
+        else: print("No solution")
+    else: p.print_help()
 
 if __name__ == "__main__":
     main()

@@ -1,13 +1,9 @@
 # constraint-solver
 
-Constraint Satisfaction Problem Solver. Zero-dependency, single-file Python CLI.
+Constraint satisfaction problem solver. Zero-dependency, single-file Python CLI.
 
 ## Usage
 
 ```bash
 python3 constraint.py --help
 ```
-
-## License
-
-MIT
